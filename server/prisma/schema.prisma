@@ -1,0 +1,389 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ────────────────────────────────────────────────
+
+enum Role {
+  USER
+  MODERATOR
+  ADMIN
+}
+
+enum PostType {
+  TEXT
+  IMAGE
+  VIDEO
+  POLL
+  THREAD
+}
+
+enum PostStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum ReportTargetType {
+  POST
+  COMMENT
+  USER
+}
+
+enum ReportStatus {
+  PENDING
+  REVIEWED
+  RESOLVED
+}
+
+enum CommunityMemberRole {
+  MEMBER
+  MODERATOR
+}
+
+enum NotificationType {
+  LIKE
+  COMMENT
+  FOLLOW
+  REPOST
+  MENTION
+}
+
+enum ReportReason {
+  HATE_SPEECH
+  SPAM
+  MISINFORMATION
+  HARASSMENT
+  NSFW
+}
+
+enum AccountStatus {
+  ACTIVE
+  WARNING
+  TEMP_SUSPENDED
+  PERMANENTLY_BANNED
+  APPEAL
+  REINSTATED
+}
+
+enum ModerationActionType {
+  APPROVE
+  REMOVE
+  WARN_USER
+  ESCALATE
+  SUSPEND
+  REINSTATE
+}
+
+// ─── Models ───────────────────────────────────────────────
+
+model User {
+  id               String        @id @default(uuid())
+  email            String        @unique
+  password         String
+  displayName      String
+  role             Role          @default(USER)
+  avatar           String?
+  bio              String?
+  accountStatus    AccountStatus @default(ACTIVE)
+  suspendedUntil   DateTime?
+  suspensionReason String?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  posts              Post[]
+  comments           Comment[]
+  likes              Like[]
+  bookmarks          Bookmark[]
+  reposts            Repost[]
+  pollVotes          PollVote[]
+  createdCommunities Community[]       @relation("CommunityCreator")
+  memberships        CommunityMember[]
+  reports            Report[]          @relation("ReportSubmitter")
+  resolvedReports    Report[]          @relation("ReportResolver")
+  followers          Follow[]          @relation("Following")
+  following          Follow[]          @relation("Follower")
+  notifications      Notification[]    @relation("NotificationRecipient")
+  actedNotifications Notification[]    @relation("NotificationActor")
+  moderationActions  ModerationAction[] @relation("ModeratedUser")
+  performedActions   ModerationAction[] @relation("ActionPerformer")
+
+  @@map("users")
+}
+
+model Post {
+  id          String     @id @default(uuid())
+  title       String
+  content     String?
+  type        PostType   @default(TEXT)
+  status      PostStatus @default(PUBLISHED)
+  mediaUrl    String?
+  authorId    String
+  communityId String?
+  scheduledAt DateTime?
+  publishedAt DateTime?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  author      User        @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  community   Community?  @relation(fields: [communityId], references: [id], onDelete: SetNull)
+  comments    Comment[]
+  likes       Like[]
+  bookmarks   Bookmark[]
+  reposts     Repost[]
+  pollOptions PollOption[]
+
+  @@index([authorId])
+  @@index([communityId])
+  @@index([status])
+  @@map("posts")
+}
+
+model PollOption {
+  id         String     @id @default(uuid())
+  text       String
+  votesCount Int        @default(0)
+  postId     String
+
+  post  Post       @relation(fields: [postId], references: [id], onDelete: Cascade)
+  votes PollVote[]
+
+  @@index([postId])
+  @@map("poll_options")
+}
+
+model PollVote {
+  id       String   @id @default(uuid())
+  userId   String
+  optionId String
+  createdAt DateTime @default(now())
+
+  user   User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  option PollOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, optionId])
+  @@map("poll_votes")
+}
+
+model Comment {
+  id        String   @id @default(uuid())
+  content   String
+  authorId  String
+  postId    String
+  parentId  String?
+  createdAt DateTime @default(now())
+
+  author   User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  post     Post      @relation(fields: [postId], references: [id], onDelete: Cascade)
+  parent   Comment?  @relation("CommentReplies", fields: [parentId], references: [id])
+  children Comment[] @relation("CommentReplies")
+
+  @@index([postId])
+  @@index([authorId])
+  @@map("comments")
+}
+
+model Like {
+  id        String   @id @default(uuid())
+  userId    String
+  postId    String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, postId])
+  @@map("likes")
+}
+
+model Bookmark {
+  id        String   @id @default(uuid())
+  userId    String
+  postId    String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, postId])
+  @@map("bookmarks")
+}
+
+model Repost {
+  id        String   @id @default(uuid())
+  userId    String
+  postId    String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, postId])
+  @@map("reposts")
+}
+
+model Follow {
+  id          String   @id @default(uuid())
+  followerId  String
+  followingId String
+  createdAt   DateTime @default(now())
+
+  follower  User @relation("Follower", fields: [followerId], references: [id], onDelete: Cascade)
+  following User @relation("Following", fields: [followingId], references: [id], onDelete: Cascade)
+
+  @@unique([followerId, followingId])
+  @@index([followerId])
+  @@index([followingId])
+  @@map("follows")
+}
+
+model Community {
+  id          String   @id @default(uuid())
+  name        String
+  slug        String   @unique
+  description String?
+  creatorId   String
+  createdAt   DateTime @default(now())
+
+  creator User              @relation("CommunityCreator", fields: [creatorId], references: [id], onDelete: Cascade)
+  posts   Post[]
+  members CommunityMember[]
+
+  @@map("communities")
+}
+
+model CommunityMember {
+  id          String              @id @default(uuid())
+  userId      String
+  communityId String
+  role        CommunityMemberRole @default(MEMBER)
+  joinedAt    DateTime            @default(now())
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  community Community @relation(fields: [communityId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, communityId])
+  @@map("community_members")
+}
+
+model Report {
+  id         String           @id @default(uuid())
+  reporterId String
+  targetType ReportTargetType
+  targetId   String
+  reason     ReportReason
+  status     ReportStatus     @default(PENDING)
+  resolvedBy String?
+  resolvedAt DateTime?
+  createdAt  DateTime         @default(now())
+
+  reporter User  @relation("ReportSubmitter", fields: [reporterId], references: [id], onDelete: Cascade)
+  resolver User? @relation("ReportResolver", fields: [resolvedBy], references: [id])
+
+  @@index([targetType, targetId])
+  @@index([status])
+  @@map("reports")
+}
+
+model ModerationAction {
+  id           String               @id @default(uuid())
+  actionType   ModerationActionType
+  targetUserId String?
+  postId       String?
+  reason       String?
+  performedBy  String
+  createdAt    DateTime             @default(now())
+
+  targetUser User? @relation("ModeratedUser", fields: [targetUserId], references: [id])
+  performer  User  @relation("ActionPerformer", fields: [performedBy], references: [id])
+
+  @@index([targetUserId])
+  @@index([performedBy])
+  @@index([createdAt])
+  @@map("moderation_actions")
+}
+
+model Notification {
+  id            String           @id @default(uuid())
+  userId        String
+  actorId       String
+  type          NotificationType
+  message       String
+  referenceId   String?
+  referenceType String?
+  isRead        Boolean          @default(false)
+  createdAt     DateTime         @default(now())
+
+  user  User @relation("NotificationRecipient", fields: [userId], references: [id], onDelete: Cascade)
+  actor User @relation("NotificationActor", fields: [actorId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+  @@index([userId, createdAt])
+  @@map("notifications")
+}
+
+// ─── Phase 5: Analytics, Compliance & Admin ───────────────
+
+enum DataExportStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  EXPIRED
+}
+
+enum DataExportFormat {
+  JSON
+  CSV
+}
+
+model DataExport {
+  id        String           @id @default(uuid())
+  userId    String
+  format    DataExportFormat @default(JSON)
+  status    DataExportStatus @default(PENDING)
+  filePath  String?
+  fileSize  Int?
+  expiresAt DateTime?
+  error     String?
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  @@index([userId])
+  @@index([status])
+  @@map("data_exports")
+}
+
+model SystemSetting {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  value     String
+  label     String?
+  category  String   @default("general")
+  updatedAt DateTime @updatedAt
+
+  @@index([category])
+  @@map("system_settings")
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  userId     String?
+  action     String
+  entityType String
+  entityId   String?
+  metadata   String?
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+  @@index([entityType])
+  @@index([action])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
