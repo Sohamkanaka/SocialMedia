@@ -59,6 +59,7 @@ const navItems: NavItem[] = [
 export function Sidebar() {
     const pathname = usePathname();
     const dispatch = useAppDispatch();
+    const router = useRouter();
     const { user, isAuthenticated } = useAppSelector((state) => state.auth);
     const [isMobileOpen, setIsMobileOpen] = useState(false);
     const { data: unreadCount } = useGetUnreadCountQuery(undefined, {
@@ -235,4 +236,5 @@ export function Sidebar() {
         </>
     );
 }
+
 
