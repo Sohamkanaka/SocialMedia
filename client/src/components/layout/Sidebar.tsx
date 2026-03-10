@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
     Home,
     Users,
@@ -78,6 +78,7 @@ export function Sidebar() {
     const handleLogout = () => {
         dispatch(logout());
         setIsMobileOpen(false);
+        router.push("/")
     };
 
     const sidebarContent = (
@@ -234,3 +235,4 @@ export function Sidebar() {
         </>
     );
 }
+
